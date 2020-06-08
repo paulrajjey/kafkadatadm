@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd        http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <bean class="org.apache.camel.component.kafka.KafkaComponent" id="kafka">
+        <property name="brokers" value="${bootstrap.server}"/>
+    </bean>
+    <bean class="com.redhat.camel.processor.RuleProcessor" id="ruleProcessor"/>
+    <bean class="com.redhat.camel.processor.DecisionRestClientProcessor" id="decisionRestClientProcessor"/>
+    <bean
+        class="com.redhat.camel.processor.DecisionRestClientResultProcessor" id="decisionRestClientResultProcessor"/>
+    <bean class="org.apache.camel.component.gson.GsonDataFormat" id="gson">
+        <!-- we want to unmarshal to person pojo -->
+        <property name="unmarshalType" value="com.albertsons.model.Customer"/>
+        <!-- we want to map fields to use lower case and underscores -->
+        <!-- property name="fieldNamingPolicy" value="LOWER_CASE_WITH_UNDERSCORES"/ -->
+    </bean>
+    <!-- <dataFormats>
+      <json id="xstream" prettyPrint="true"/>
+      <json id="jackson" prettyPrint="true" library="Jackson"/>
+      <json id="gson" prettyPrint="true" library="Gson"/>
+	 </dataFormats>-->
+    <!-- <bean id="fileReadLockStrategy" class="org.apache.camel.component.file.strategy.CachedFileChangedExclusiveReadLockStrategy"/>
+     -->
+    <camelContext id="camel" xmlns="http://camel.apache.org/schema/spring">
+        <route id="camel-kafak-consumer-route">
+            <from id="kafka-consumer" uri="kafka:my-topic1?groupId=kafkademo"/>
+            <log id="route-log-before" message="consumer -> after received from topuc >>> ${body}"/>
+            <unmarshal id="_unmarshal1">
+                <custom ref="gson"/>
+            </unmarshal>
+            <process id="_RuleEngine" ref="ruleProcessor"/>
+            <marshal id="_marshal1">
+                <custom ref="gson"/>
+            </marshal>
+            <log id="route-after" message="after rule processed >>> ${body}"/>
+            <to id="outputfile" uri="file://{{output.path}}?fileName=result-$simple{date:now:ddMMyyyy-hh:mm:ss}.json">
+                <description>send to outfile</description>
+            </to>
+        </route>
+        <route id="camel-kafaka-producer-route">
+            <!-- <from id="_from1" uri="file://{{fileConsumer.path}}?delete=true&amp;delay={{fileConsumer.delay}}"/>-->
+            <from id="_from1" uri="file://{{fileConsumer.path}}?move={{processed.path}}/$simple{date:now:ddMMyyyy-hh:mm:ss}.json"/>
+            <log id="_log1" message="Consumed file: [${headers[CamelFileName]}]."/>
+            <to id="kafka-producer" uri="kafka:my-topic1?groupId=kafkademo"/>
+        </route>
+        <route id="camel-kafaka-producer-route-rest">
+            <!-- <from id="_from1" uri="file://{{fileConsumer.path}}?delete=true&amp;delay={{fileConsumer.delay}}"/>-->
+            <from id="_fromREST" uri="file://{{fileConsumerrest.path}}?move={{processedrest.path}}/$simple{date:now:ddMMyyyy-hh:mm:ss}.json"/>
+            <log id="_logrest" message="Consumed file: [${headers[CamelFileName]}]."/>
+            <to id="kafka-producer-rest" uri="kafka:my-topicrest?groupId=kafkademo"/>
+        </route>
+        <route id="decision-server-rest" trace="false">
+            <!-- Using the xstream marshalling -->
+            <from id="kafka-consumer" uri="kafka:my-topicrest?groupId=kafkademorest"/>
+            <log id="route-log-rest-before" message="rest consumer -> >>> ${body}"/>
+            <unmarshal id="_unmarshalrest">
+                <custom ref="gson"/>
+            </unmarshal>
+            <process id="_RuleRestApi" ref="decisionRestClientProcessor"/>
+            <setHeader headerName="CamelHttpMethod" id="header-post">
+                <constant>POST</constant>
+            </setHeader>
+            <!-- Using the xstream marshalling -->
+            <setHeader headerName="Content-Type" id="route-header-content-type">
+                <constant>application/json</constant>
+            </setHeader>
+            <setHeader headerName="X-KIE-ContentType" id="route-header-kie-content-type">
+                <constant>json</constant>
+            </setHeader>
+            <!--  <marshal id="route-marshal">
+                <xstream/>
+            </marshal>
+             <unmarshal id="route-marshal">
+                <custom ref="gson"/>
+            </unmarshal>-->
+            <log id="route-log-rest-aftermarshall" message="rest body -> >>> ${body}"/>
+            <to id="to-http-rest" uri="http://{{service:{{kieserver.service}}:{{kieserver.devel-service}}}}/{{kieserver.path}}?authMethod=Basic&amp;authUsername={{kieserver.username}}&amp;authPassword={{kieserver.password}}"/>
+            <!-- Unmarshal the response -->
+            <!-- <unmarshal id="route-unmarshal">
+                <xstream/>
+            </unmarshal>  -->
+            <process id="resultparser" ref="decisionRestClientResultProcessor"/>
+            <log id="route-log-rest-after" message="rest consumerresult -> >>> ${body}"/>
+            <!-- setBody id="setBody-restresult" >
+            	<simple>"${out.body}"</simple>
+            </setBody -->
+            <to id="restoutputfile" uri="file://{{outputrest.path}}?fileName=result-$simple{date:now:ddMMyyyy-hh:mm:ss}.json"/>
+        </route>
+        <!-- route id="producer-route">
+            <from id="route-timer" uri="timer://foo?period=1000"/>
+            <setBody id="route-setBody">
+                <simple>Hello World from camel-context.xml with ID ${id}</simple>
+            </setBody>
+            <to id="_kafka1" uri="kafka:my-topic"/>
+            <log id="route-log-producer" message="producer >>> ${body}"/>
+        </route -->
+    </camelContext>
+</beans>
