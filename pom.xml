@@ -13,7 +13,7 @@
     <fabric8.maven.plugin.version>3.5.33.fuse-710023-redhat-00002</fabric8.maven.plugin.version>
     <maven-compiler-plugin.version>3.6.0</maven-compiler-plugin.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <kie.version>7.23.0.Final-redhat-00002</kie.version> 
+    <kie.version>8.29.0.Final-redhat-00012</kie.version> 
     <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
   </properties>
   <dependencyManagement>
